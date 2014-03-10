@@ -1,0 +1,198 @@
+ca fe ba be : magic
+00 00 : minor version
+00 33 : major version
+00 1d : constant pool count (29)
+
+# 1
+0a : method ref
+00 06 : class index
+00 0f : name and type index
+
+# 2
+09 : field ref
+00 10 : class index
+00 11 : name and type index
+
+# 3
+08 : String
+00 12 : Utf8 index
+
+# 4
+0a : method ref
+00 13 : class index
+00 14 : name and type index
+
+# 5
+07 : class
+00 15 : name index
+
+# 6
+07 : class
+00 16 : name index
+
+# 7
+01 : Utf8
+00 06 : length (6)
+3c 69 6e 69 74 3e : <init>
+
+# 8
+01 : Utf8
+00 03 : length (3)
+28 29 56 : ()V
+
+# 9
+01 : Utf8
+00 04 : length (4)
+43 6f 64 65 : Code
+
+# 10
+01 : Utf8
+00 0f : length (15)
+4c 69 6e 65 4e 75 6d 62 65 72 54 61 62 6c 65 : LineNumberTable
+
+# 11
+01 : Utf8
+00 04 : length (4)
+6d 61 69 6e : main
+
+# 12
+01 : Utf8
+00 16 : length (22)
+28 5b 4c 6a 61 76 61 2f 6c 61 6e 67 2f 53 74 72 69 6e 67 3b 29 56 : ([Ljava/lang/String;)V
+
+# 13
+01 : Utf8
+00 0a : length (10)
+53 6f 75 72 63 65 46 69 6c 65 : SourceFile
+
+# 14
+01 : Utf8
+00 0f : length (15)
+48 65 6c 6c 6f 57 6f 72 6c 64 2e 6a 61 76 61 : HelloWorld.java
+
+# 15
+0c : NameAndType
+00 07 : name index
+00 08 : descriptor index
+
+# 16
+07 : Class
+00 17 : name index
+
+# 17
+0c : NameAndType
+00 18 : name index
+00 19 : descriptor index
+
+# 18
+01 : Utf8
+00 0c : length (12)
+48 65 6c 6c 6f 20 57 6f 72 6c 64 21 : Hello World!
+
+# 19
+07 : Class
+00 1a : name index
+
+# 20
+0c : NameAndType
+00 1b : name index
+00 1c : type index
+
+# 21
+01 : Utf8
+00 0a : length (10)
+48 65 6c 6c 6f 57 6f 72 6c 64 : HelloWorld
+
+# 22
+01 : Utf8
+00 10 : length (16)
+6a 61 76 61 2f 6c 61 6e 67 2f 4f 62 6a 65 63 74 : java/lang/Object
+
+# 23
+01 : Utf8
+00 10 : length (16)
+6a 61 76 61 2f 6c 61 6e 67 2f 53 79 73 74 65 6d : java/lang/System
+
+# 24
+01 : Utf8
+00 03 : length (3)
+6f 75 74 : kout
+
+# 25
+01 : Utf8
+00 15 : length (21)
+4c 6a 61 76 61 2f 69 6f 2f 50 72 69 6e 74 53 74 72 65 61 6d 3b Ljava/io/PrintStream;
+
+# 26
+01 : Utf8
+00 13 : length (19)
+6a 61 76 61 2f 69 6f 2f 50 72 69 6e 74 53 74 72 65 61 6d : java/io/PrintStream
+
+# 27
+01 : Utf8
+00 07 : length (7)
+70 72 69 6e 74 6c 6e : println
+
+# 28
+01 : Utf8
+00 15 : length (21)
+28 4c 6a 61 76 61 2f  6c 61 6e 67 2f 53 74 72 69 6e 67 3b 29 56 : (Ljava/lang/String;)V
+
+00 20 : access flags
+00 05 : this class
+00 06 : super class
+
+00 00 : interfaces count
+
+00 00 : fields count
+
+00 02 : methods count
+
+# method 1
+00 00 : access flags
+00 07 : name index
+00 08 : descriptor index
+00 01 : attributes count
+# m1 attribute 1
+00 09 : attribute name index (Code)
+00 00 00 1d : attribute length (29)
+00 01 : max stack
+00 01 : max locals
+00 00 00 05 : code length (5)
+2a b7 00 01 b1 : code
+00 00 : exception table length (0)
+00 01 : attributes count
+00 0a : attribute name index (LineNumberTable)
+00 00 00 06 : attribute length (6)
+00 01 : line number table length
+00 00 : start pc
+00 02 : line number
+
+# method 2
+00 09 : access flags
+00 0b : name index
+00 0c : descriptor index
+00 01 : attributes count
+# m2 attribute 1
+00 09 : attribute name index (Code)
+00 00 00 25 : attribute length (37)
+00 02 : max stack
+00 01 : max locals
+00 00 00 09 : code length
+b2 00 02 12 03 b6 00 04 b1 : code
+00 00 : exception table length
+00 01 : attributes count
+00 0a : attribute name index (LineNumberTable)
+00 00 00 0a : attribute length (10)
+00 02 : line number table length
+00 00 : start pc
+00 04 : line number
+00 08 : start pc
+00 05 : line number
+
+00 01 : attributes count
+
+# attribute 1
+00 0d : attribute name index (SourceFile)
+00 00 00 02 : attribute length (2)
+00 0e : source file index (HelloWorld.java)
