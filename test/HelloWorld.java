@@ -1,4 +1,13 @@
-public class HelloWorld {
+import java.io.Serializable;
+
+public class HelloWorld implements Serializable {
+  public int m_public;
+  protected int m_protected;
+  private int m_private;
+  static int m_static;
+  int m_default;
+
+
   public static void main (String[] argv) {
     System.out.println("Hello World!");
     System.out.println(1337);
