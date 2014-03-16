@@ -3,20 +3,22 @@ grammar signature;
 options {
   language=Python;
   backtrack=true;
-  //output=AST;
+  output=AST;
 }
 
-FieldDescriptor
-  : FieldType
+tokens { ID; CLASS; }
+
+fieldDescriptor
+  : fieldType^
   ;
 
-FieldType
-  : BaseType
-  | ObjectType
-  | ArrayType
+fieldType
+  : baseType
+  | objectType
+  | arrayType
   ;
 
-BaseType
+baseType
   : 'B'
   | 'C'
   | 'D'
@@ -27,130 +29,144 @@ BaseType
   | 'Z'
   ;
 
-ObjectType
-  //: 'L' ClassName ';'
-  : 'L' PackageSpecifier ';'
+objectType
+  : 'L'^ className ';'!
   ;
 
-ArrayType
-  : '[' ComponentType
+className
+  : packageSpecifier? id
+  -> ^(CLASS packageSpecifier? id)
   ;
 
-ComponentType
-  : FieldType
+arrayType
+  : '['^ componentType
   ;
 
-
-MethodDescriptor
-  : '(' ParameterDescriptor* ')' ReturnDescriptor
-  ;
-
-ParameterDescriptor
-  : FieldType
+componentType
+  : fieldType
   ;
 
 
-ReturnDescriptor
-  : FieldType
-  | VoidDescriptor
+methodDescriptor
+  : '('^ parameterDescriptor* ')' returnDescriptor
   ;
 
-VoidDescriptor
+parameterDescriptor
+  : fieldType
+  ;
+
+
+returnDescriptor
+  : fieldType
+  | voidDescriptor
+  ;
+
+voidDescriptor
   : 'V'
   ;
 
-ClassSignature
-  : FormalTypeParameters? SuperclassSignature SuperinterfaceSignature*
+classSignature
+  : formalTypeParameters? superclassSignature superinterfaceSignature*
   ;
 
-FormalTypeParameters
-  : '<' FormalTypeParameter+ '>'
+formalTypeParameters
+  : '<' formalTypeParameter+ '>'
   ;
 
-FormalTypeParameter
-  : ID ClassBound InterfaceBound*
+formalTypeParameter
+  : id classBound interfaceBound*
   ;
 
-ClassBound
-  : ':' FieldTypeSignature?
+classBound
+  : ':' fieldTypeSignature?
   ;
 
-InterfaceBound
-  : ':' FieldTypeSignature
+interfaceBound
+  : ':' fieldTypeSignature
   ;
 
-SuperclassSignature
-  : ClassTypeSignature
+superclassSignature
+  : classTypeSignature
   ;
 
-SuperinterfaceSignature
-  : ClassTypeSignature
+superinterfaceSignature
+  : classTypeSignature
   ;
 
-FieldTypeSignature
-  : ClassTypeSignature
-  | ArrayTypeSignature
-  | TypeVariableSignature
+fieldTypeSignature
+  : classTypeSignature
+  | arrayTypeSignature
+  | typeVariableSignature
   ;
 
-ClassTypeSignature
-  : 'L' PackageSpecifier? SimpleClassTypeSignature ClassTypeSignatureSuffix* ';'
+classTypeSignature
+  : 'L' packageSpecifier? simpleClassTypeSignature classTypeSignatureSuffix* ';'
   ;
 
-PackageSpecifier
-  : ID '/' PackageSpecifier*
+packageSpecifier
+  : id '/' packageSpecifier*
   ;
 
-SimpleClassTypeSignature
-  : ID TypeArguments?
+simpleClassTypeSignature
+  : id typeArguments?
   ;
 
-ClassTypeSignatureSuffix
-  : '.' SimpleClassTypeSignature
+classTypeSignatureSuffix
+  : '.' simpleClassTypeSignature
   ;
 
-TypeVariableSignature
-  : 'T' ID ';'
+typeVariableSignature
+  : 'T' id ';'
   ;
 
-TypeArguments
-  : '<' TypeArgument+ '>'
+typeArguments
+  : '<' typeArgument+ '>'
   ;
 
-TypeArgument
-  : WildcardIndicator? FieldTypeSignature
+typeArgument
+  : wildcardIndicator? fieldTypeSignature
   | '*'
   ;
 
-WildcardIndicator
+wildcardIndicator
   : '+'
   | '-'
   ;
 
-ArrayTypeSignature
-  : '[' TypeSignature
+arrayTypeSignature
+  : '[' typeSignature
   ;
 
-TypeSignature
-  : FieldTypeSignature
-  | BaseType
+typeSignature
+  : fieldTypeSignature
+  | baseType
   ;
 
-MethodTypeSignature
-  : FormalTypeParameters? '(' TypeSignature* ')' ReturnType ThrowsSignature*
+methodTypeSignature
+  : formalTypeParameters? '(' typeSignature* ')' returnType throwsSignature*
   ;
 
-ReturnType
-  : TypeSignature
-  | VoidDescriptor
+returnType
+  : typeSignature
+  | voidDescriptor
   ;
 
-ThrowsSignature
-  : '^' ClassTypeSignature
-  | '^' TypeVariableSignature
+throwsSignature
+  : '^' classTypeSignature
+  | '^' typeVariableSignature
   ;
 
-ID
+id_chars
   : ~('.' | ';' | '[' | '/' | '<' | '>' | ':')+
+  ;
+
+id
+  : id_chars
+  -> ^(ID id_chars)
+  ;
+
+
+ELSE
+  : ~('.' | ';' | '[' | '/' | '<' | '>' | ':')
   ;
 
