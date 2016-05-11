@@ -1,58 +1,142 @@
 from classfile import *
+from classfile.bytecode import ByteCode
+from classfile.descriptor import HasDescriptor
 from classfile.flags import *
 from classfile.frames import *
+from classfile.bytereader import ByteReader
+from enum import Enum
+import io
+from collections import defaultdict
+from formatter import Document
 
-class Attribute (metaclass=Parsed):
-  attribute_name_index = ConstantUtf8
+import logging
+
+class Attribute (Parsed, metaclass=MetaTaggedParsed):
+  _class_map = defaultdict(lambda: AttributeStub)
   attribute_length = 'u4'
-  info = ('read', 'attribute_length')
 
   @classmethod
-  def parse (class_, rdr):
-    self = class_._parse(rdr)
-    try:
-      AttrClass = globals()['Attribute' + self.attribute_name.string]
+  def _read_tag (cls, rdr):
+    return rdr.pool_ref(ConstantUtf8).string
 
-      sub_reader = ByteReader(io.BytesIO(self.info), rdr.class_file)
-      return AttrClass.parse(sub_reader)
-    except:
-      return self
+  def describe (self):
+    return repr(self)
 
+class Attributes (Parsed):
+  attributes_count = 'u2'
+
+  def __init__ (self, rdr):
+    super().__init__(rdr)
+
+    self.attributes = []
+    self._attr_map = {}
+
+  @classmethod
+  def parse (cls, rdr):
+    self = cls._parse(rdr)
+
+    for _ in range(self.attributes_count):
+      begin = rdr.offset
+      attr = Attribute.parse(rdr)
+      end = rdr.offset
+      parsed = end - begin - 6; # pool_ref (2) + attribute_lenth (4) = 6
+
+      if parsed != attr.attribute_length:
+        raise ValueError("Attribute {!r} expected to parse {} bytes, but parsed {}"
+                         .format(attr, attr.attribute_length, parsed))
+
+      self.attributes.append(attr)
+      self._attr_map[type(attr).__name__[9:]] = attr
+
+    return self
+
+  def describe (self):
+    doc = Document()
+    doc.append("Attributes: {}".format(len(self)))
+    body = doc.indent()
+    for attr in self:
+      body.append(attr.describe())
+    return doc
+
+  def __getitem__ (self, key):
+    print("Attribute.__getitem__(key={})".format(key))
+    return self._attr_map[key]
+
+  def __len__ (self):
+    return len(self.attributes)
+
+  def __iter__ (self):
+    return iter(self.attributes)
+
+  def __contains__ (self, item):
+    return item in self._attr_map or item in self.attributes
+
+  def __getattr__ (self, name):
+    if name in self._attr_map:
+      return self._attr_map[name]
+    if name in self.attributes:
+      return self.attributes[name]
+    raise AttributeError("No attribute named '{}'".format(name))
+
+
+class AttributeStub (Attribute):
+  """ Reads all the attribute data if we don't know what else to do with it. """
+  info = ('read', 'attribute_length')
+
+
+class AttributeConstantValue (Attribute):
+  constantvalue_index = Constant
 
   def __str__ (self):
-    return ("<Attribute(attribute_name={}, attribute_length={}, info={})>"
-            .format(self.attribute_name, self.attribute_length, self.info))
+    return str(self.constantvalue)
 
 
-class AttributeConstantValue (metaclass=Parsed):
-  constantvalue_index = ConstantUtf8
-
-  def __str__ (self):
-    return ("<AttributeConstantValue(constantvalue={})>"
-            .format(self.constantvalue))
-
-
-class ExceptionHandler (metaclass=Parsed):
+class ExceptionHandler (Parsed):
   start_pc = 'u2'
   end_pc = 'u2'
   handler_pc = 'u2'
   catch_type = ConstantClass
 
-class AttributeCode (metaclass=Parsed):
+class AttributeCode (Attribute):
   max_stack = 'u2'
   max_locals = 'u2'
-  code_length = 'u4'
-  code = ('read', 'code_length')
+  byte_code = ByteCode
   exception_table_length = 'u2'
   exception_table = ('many', 'exception_table_length', ExceptionHandler)
-  attributes_count = 'u2'
-  attributes = ('many', 'attributes_count', Attribute)
+  attributes = Attributes
 
-class AttributeStackMapTable (metaclass=Parsed):
+  def describe (self):
+    doc = Document()
+    doc.append("AttributeCode:")
+    body = doc.indent()
+    body.append("Max stack: {}".format(self.max_stack))
+    body.append("Max locals: {}".format(self.max_locals))
+    body.append("Byte code:")
+    bytecode = body.indent()
+    bytecode.extend(self.byte_code.formatted())
+    body.append("Exception table: {}".format(len(self.exception_table)))
+    extab = body.indent()
+    for exhand in self.exception_table:
+      extab.append(repr(exhand))
+    body.append(self.attributes.describe())
+    return doc
+
+
+
+class AttributeStackMapTable (Attribute):
   number_of_entries = 'u2'
   entries = ('many', 'number_of_entries', StackMapFrame)
 
-class AttributeExceptions (metaclass=Parsed):
+  def describe (self):
+    doc = Document()
+    doc.append("AttributeStackMapTable: {} frames".format(len(self.entries)))
+    body = doc.indent()
+    for entry in self.entries:
+      body.append(repr(entry))
+    return doc
+
+
+class AttributeExceptions (Attribute, uses_constant_pool=True):
   number_of_exceptions = 'u2'
   exception_index_table = ('many', 'number_of_exceptions', 'u2')
 
@@ -70,77 +154,86 @@ class AttributeExceptions (metaclass=Parsed):
 
     return self._exception_table
 
-class InnerClass (metaclass=Parsed):
+class InnerClass (Parsed):
   inner_class_info_index = ConstantClass
   outer_class_info_index = ConstantClass
   inner_name_index = ConstantUtf8
   inner_class_access_flags = ('u2', ClassAccessFlags.flags)
 
-class AttributeInnerClasses (metaclass=Parsed):
+class AttributeInnerClasses (Attribute):
   number_of_classes = 'u2'
   classes = ('many', 'number_of_classes', InnerClass)
 
 
-class AttributeEnclosingMethod (metaclass=Parsed):
+class AttributeEnclosingMethod (Attribute):
   class_index = ConstantClass
   method_index = ConstantNameAndType
 
-class AttributeSynthetic (metaclass=Parsed):
+class AttributeSynthetic (Attribute):
+  # 0-length attribute
   pass
 
-class AttributeSignature (metaclass=Parsed):
+class AttributeSignature (Attribute):
   signature_index = ConstantUtf8
 
-  def __str__ (self):
+  def __repr__ (self):
     return ("<AttributeSignature(signature={})>"
             .format(self.signature))
 
-class AttributeSourceFile (metaclass=Parsed):
+class AttributeSourceFile (Attribute):
   sourcefile_index = ConstantUtf8
 
-  def __str__ (self):
+  def __repr__ (self):
     return ("<AttributeSourceFile(sourcefile={})>"
             .format(self.sourcefile))
 
-class AttributeSourceDebugExtension (metaclass=Parsed):
+class AttributeSourceDebugExtension (Attribute):
   debug_extension = ('read', None)
 
-class LineNumberEntry (metaclass=Parsed):
+class LineNumberEntry (Parsed):
   start_pc = 'u2'
   line_number = 'u2'
 
-class AttributeLineNumberTable (metaclass=Parsed):
+class AttributeLineNumberTable (Attribute):
   line_number_table_length = 'u2'
   line_number_table = ('many', 'line_number_table_length', LineNumberEntry)
 
-class LocalVariableEntry (metaclass=Parsed):
+  def describe (self):
+    doc = Document()
+    doc.append('AttributeLineNumberTable')
+    body = doc.indent()
+    body.extend(self.line_number_table)
+    return doc
+
+class LocalVariableEntry (Parsed, HasDescriptor):
   start_pc = 'u2'
   length = 'u2'
   name_index = ConstantUtf8
-  descriptor_index = ConstantUtf8
+  _descriptor_index = ConstantUtf8
   index = 'u2'
 
-class AttributeLocalVariableTable (metaclass=Parsed):
+class AttributeLocalVariableTable (Attribute):
   local_variable_table_length = 'u2'
   local_variable_table = ('many', 'local_variable_table_length',
                           LocalVariableEntry)
 
-class LocalVariableTypeEntry (metaclass=Parsed):
+class LocalVariableTypeEntry (Parsed):
   start_pc = 'u2'
   length = 'u2'
   name_index = ConstantUtf8
   signature_index = ConstantUtf8
   index = 'u2'
 
-class AttributeLocalVariableTypeTable (metaclass=Parsed):
+class AttributeLocalVariableTypeTable (Attribute):
   local_variable_type_table_length = 'u2'
   local_variable_type_table = ('many', 'local_variable_type_table_length',
                                LocalVariableTypeEntry)
 
-class AttributeDeprecated (metaclass=Parsed):
+class AttributeDeprecated (Attribute):
+  # 0-length attribute
   pass
 
-class ElementValue (metaclass=Parsed):
+class ElementValue (Parsed):
   tag = 'u1'
 
   @classmethod
@@ -160,6 +253,8 @@ class ElementValue (metaclass=Parsed):
     else:
       raise ValueError("Unknown ElementValue tag: {}".format(tag))
 
+    return self
+
 class ElementValueConst (ElementValue):
   const_value_index = Constant
 
@@ -174,11 +269,11 @@ class ElementValueArray (ElementValue):
   num_values = 'u2'
   values = ('many', 'num_values', ElementValue)
 
-class ElementValuePair (metaclass=Parsed):
+class ElementValuePair (Parsed):
   element_name_index = ConstantUtf8
   value = ElementValue
 
-class Annotation (metaclass=Parsed):
+class Annotation (Parsed):
   type_index = ConstantUtf8
   num_element_value_pairs = 'u2'
   element_value_pairs = ('many', 'num_element_value_pairs', ElementValuePair)
@@ -186,7 +281,7 @@ class Annotation (metaclass=Parsed):
 class ElementValueAnnotation (ElementValue):
   annotation = Annotation
 
-class Annotations (metaclass=Parsed):
+class Annotations (Parsed):
   num_annotations = 'u2'
   annotations = ('many', 'num_annotations', Annotation)
 
@@ -196,7 +291,7 @@ class AttributeRuntimeVisibleAnnotations (Annotations):
 class AttributeRuntimeInvisibleAnnotations (Annotations):
   pass
 
-class ParameterAnnotations (metaclass=Parsed):
+class ParameterAnnotations (Parsed):
   num_parameters = 'u1'
   parameter_annotations = ('many', 'num_parameters', Annotations)
 
@@ -206,10 +301,10 @@ class AttributeRuntimeVisibleParameterAnnotations (ParameterAnnotations):
 class AttributeRuntimeInvisibleParameterAnnotations (ParameterAnnotations):
   pass
 
-class AttributeAnnotationDefault (metaclass=Parsed):
+class AttributeAnnotationDefault (Attribute):
   default_value = ElementValue
 
-class BootstrapMethods (metaclass=Parsed):
+class BootstrapMethods (Parsed):
   bootstrap_method_ref_index = ConstantMethodHandle
   num_bootstrap_arguments = 'u2'
   bootstrap_argument_indexes = ...
@@ -223,6 +318,5 @@ class BootstrapMethods (metaclass=Parsed):
                                    for idx in self.bootstrap_argument_indexes]
     return self._bootstrap_arguments
 
-class AttributesBootstrapMethods (metaclass=Parsed):
+class AttributesBootstrapMethods (Attribute):
   num_bootstrap_methods = 'u2'
-

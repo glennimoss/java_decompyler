@@ -1,6 +1,45 @@
 from enum import IntEnum
-from classfile import *
-from classfile.descriptor import *
+from classfile.descriptor import HasDescriptor, ClassDescriptor, SignatureDescriptor
+import classfile.meta
+from classfile.meta import *
+import struct
+from classfile.meta import Constant
+
+class ConstantPool (Parsed, list):
+  pool_count = 'u2'
+
+  @classmethod
+  def parse (cls, rdr):
+    self = cls._parse(rdr)
+
+    rdr.constant_pool = self
+
+    self.append(None) # Constant pool starts at 1
+    while len(self) < self.pool_count:
+      const = Constant.parse(rdr)
+      self.append(const)
+      if const.tag in (ConstantType.Long, ConstantType.Double):
+        # Longs and Doubles take up two slots
+        self.append(None)
+
+    return self
+
+  def resolve (self, idx, ref_type):
+    if idx == 0:
+      # TODO: Is this the right approach?
+      import pdb;pdb.set_trace()
+      return None
+    try:
+      ref = self[idx]
+      assert (isinstance(ref, ref_type),
+              "constant_pool[{}] = {!r}, expected {}".format(idx, ref, ref_type))
+      return ref
+    except IndexError:
+      return idx
+    #except (TypeError, AssertionError) as e:
+      ##import pdb;pdb.set_trace()
+      #print(e)
+
 
 class ConstantType (IntEnum):
   Class               = 0x07
@@ -34,70 +73,88 @@ class ConstantUtf8 (Constant):
   def __iter__ (self):
     return iter(self.string)
 
-class ConstantNameAndType (Constant):
+class ConstantNameAndType (Constant, HasDescriptor):
   tag = ConstantType.NameAndType
 
   name_index = ConstantUtf8
-  descriptor_index = ConstantUtf8
+  _descriptor_index = ConstantUtf8
 
   def __str__ (self):
-    return "{}: {}".format(self.name, Descriptor.parse(self.descriptor))
+    try:
+      if isinstance(self.descriptor, SignatureDescriptor):
+        return "{} {}{}".format(self.descriptor.return_type,
+                                self.name,
+                                self.descriptor.arg_types)
+      return "{} {}".format(self.descriptor, self.name)
+    except TypeError as e:
+      print("-->", e)
+      return "name: #{} _descriptor: #{}".format(self.name_index, self._descriptor_index)
 
-class ConstantClass (Constant):
+class ConstantClass (Constant, HasDescriptor):
   tag = ConstantType.Class
 
   name_index = ConstantUtf8
 
   def __str__ (self):
-    return bin_class(self.name)
+    return str(self.descriptor)
 
+  @property
+  def _descriptor (self):
+    return 'L{};'.format(self.name)
 
 class ConstantRef (Constant):
-  cls_index = ConstantClass
+  _cls_index = ConstantClass
   name_and_type_index = ConstantNameAndType
+
+  @property
+  def cls (self):
+    return self._cls.descriptor
 
 class ConstantFieldref (ConstantRef):
   tag = ConstantType.Fieldref
 
   def __str__ (self):
     try:
-      return "{}.{}: {}".format(
-        bin_class(self.cls.name), self.name_and_type.name,
-        Descriptor.parse(self.name_and_type.descriptor))
-    except:
-      return "Fieldref: pending..."
+      return "{} {}.{}".format(self.name_and_type.descriptor, self.cls,
+                               self.name_and_type.name)
+    except AttributeError as e:
+      print("-->", e)
+      return "cls: #{} name_and_type: #{}".format(self._cls_index, self.name_and_type_index)
 
 class ConstantMethodref (ConstantRef):
   tag = ConstantType.Methodref
 
   def __str__ (self):
     try:
-      return "{}.{}: {}".format(bin_class(self.cls.name),
-                                           self.name_and_type.name,
-                                           Descriptor.parse(
-                                             self.name_and_type.descriptor))
-    except:
-      return "Methodref: pending..."
+      sig = self.name_and_type.descriptor
+      return "{} {}.{}{}".format(sig.return_type,
+                                 self.cls,
+                                 self.name_and_type.name,
+                                 sig.arg_types
+                                )
+    except AttributeError as e:
+      print("-->", e)
+      return "cls: #{} name_and_type: #{}".format(self._cls_index, self.name_and_type_index)
 
-class ConstantInterfaceMethodref (ConstantRef):
+class ConstantInterfaceMethodref (ConstantMethodref):
   tag = ConstantType.InterfaceMethodref
-
-  def __str__ (self):
-    try:
-      return "{}.{}: {}".format(
-        bin_class(self.cls.name), self.name_and_type.name,
-        Descriptor.parse(self.name_and_type.descriptor))
-    except:
-      return "InterfaceMethodRef: pending..."
 
 
 class ConstantString (Constant):
   tag = ConstantType.String
 
-  string_index = ConstantUtf8
+  value_index = ConstantUtf8
 
   def __str__ (self):
-    return str(self.string)
+    try:
+      return '"{}"'.format(
+        self.value.string
+        .replace('\\', r'\\')
+        .replace('"', r'\"')
+      )
+    except AttributeError as e:
+      print("-->", e)
+      return "value: #{}".format(self.value_index)
 
 class Constant32Bits (Constant):
   bytes = ('read', 4)
@@ -123,9 +180,6 @@ class ConstantFloat (Constant32Bits):
     return str(self.value)
 
 class Constant64Bits (Constant):
-  #high_bytes = 'u4'
-  #low_bytes = 'u4'
-
   bytes = ('read', 8)
 
 class ConstantLong (Constant64Bits):
@@ -136,7 +190,7 @@ class ConstantLong (Constant64Bits):
     return int.from_bytes(self.bytes, 'big')
 
   def __str__ (self):
-    return str(self.value)
+    return "{}L".format(self.value)
 
 
 class ConstantDouble (Constant64Bits):
@@ -184,5 +238,3 @@ class ConstantInvokeDynamic (Constant):
 
   #bootstrap_method_attr_index = Bootsrap_ref #??
   name_and_type_index = ConstantNameAndType
-
-

@@ -1,124 +1,139 @@
+from classfile.descriptor import ClassDescriptor, ArrayDescriptor
 from classfile.flags import *
+from formatter import Document
 
 def decompyle (classfile):
-  lines = ['\n']
+  implicit = {None, 'java.lang', classfile.this_class.package}
+  imports = set()
+  namespace = set()
+  def simplify_class (class_):
+    if isinstance(class_, ArrayDescriptor):
+      return ArrayDescriptor(simplify_class(class_.element_type))
+    if not isinstance(class_, ClassDescriptor):
+      return class_
+    if class_.package not in implicit and class_ not in imports:
+      if class_.class_name in namespace:
+        # We can't import because of a name conflict
+        return str(class_)
 
-  line = [' ']
+      imports.add(class_)
+      namespace.add(class_.class_name)
+
+    return class_.class_name
+
+  class_def = Document()
+  package_decl = class_def.section()
+  import_block = class_def.section()
+  decl, class_body = class_def.block()
+
+  if classfile.this_class.package:
+    package_decl.line('package', classfile.this_class.package)
+
+  class_fields = class_body.section()
+  class_methods = class_body.section()
+
   for flag in sorted(classfile.access_flags):
     if flag is ClassAccessFlags.ACC_PUBLIC:
-      line.append('public')
+      decl.append('public')
     elif flag is ClassAccessFlags.ACC_FINAL:
-      line.append('final')
+      decl.append('final')
     elif flag is ClassAccessFlags.ACC_ABSTRACT:
-      line.append('abstract')
+      decl.append('abstract')
 
   if ClassAccessFlags.ACC_INTERFACE in classfile.access_flags:
-    line.append('interface')
+    decl.append('interface')
   elif ClassAccessFlags.ACC_ENUM in classfile.access_flags:
-    line.append('enum')
+    decl.append('enum')
   else:
-    line.append('class')
+    decl.append('class')
 
-  line.append(classfile.this_class)
+  decl.append(classfile.this_class.class_name)
 
   if str(classfile.super_class) != 'java.lang.Object':
-    line.append('extends')
-    line.append(classfile.super_class)
+    decl.append('extends')
+    decl.append(simplify_class(classfile.super_class))
 
   if classfile.interfaces:
-    line.append('implements')
-    line.append([', '] + classfile.interfaces)
-
-  line.append('{')
-  lines.append(line)
+    decl.append('implements')
+    ifaces = decl.join(sep=', ')
+    ifaces.extend(simplify_class(cls.descriptor) for cls in classfile.interfaces)
 
   for field in classfile.fields:
-    line = [' ', ' ']
+    field_line = class_fields.line()
     for flag in sorted(field.access_flags):
       if flag is FieldAccessFlags.ACC_PUBLIC:
-        line.append('public')
+        field_line.append('public')
       elif flag is FieldAccessFlags.ACC_PRIVATE:
-        line.append('private')
+        field_line.append('private')
       elif flag is FieldAccessFlags.ACC_PROTECTED:
-        line.append('protected')
+        field_line.append('protected')
       elif flag is FieldAccessFlags.ACC_STATIC:
-        line.append('static')
+        field_line.append('static')
       elif flag is FieldAccessFlags.ACC_FINAL:
-        line.append('final')
+        field_line.append('final')
       elif flag is FieldAccessFlags.ACC_VOLATILE:
-        line.append('volatile')
+        field_line.append('volatile')
       elif flag is FieldAccessFlags.ACC_TRANSIENT:
-        line.append('transient')
+        field_line.append('transient')
       elif flag is FieldAccessFlags.ACC_SYNTHETIC:
         # TODO: Is just skipping the right thing to do?
-        continue
-    line.append(field.descriptor)
-    line.append(['', field.name, ';'])
+        #continue
+        field_line.append('/* synthetic */')
+    field_line.append(simplify_class(field.descriptor))
+    field_line.append(field.name)
+    if 'ConstantValue' in field.attributes:
+      field_line.append('=');
+      field_line.append(field.attributes.ConstantValue)
 
-    lines.append(line)
-
-  lines.append('')
 
   for method in classfile.methods:
-    method_lines = ['\n  ']
-    line = [' ', ' ']
+    method_def = class_methods.section()
+    if MethodAccessFlags.ACC_ABSTRACT in method.access_flags:
+      method_decl = method_def.line()
+      method_body = None
+    else:
+      method_decl, method_body = method_def.block()
+
     for flag in sorted(method.access_flags):
       if flag is MethodAccessFlags.ACC_PUBLIC:
-        line.append('public')
+        method_decl.append('public')
       elif flag is MethodAccessFlags.ACC_PRIVATE:
-        line.append('private')
+        method_decl.append('private')
       elif flag is MethodAccessFlags.ACC_PROTECTED:
-        line.append('protected')
+        method_decl.append('protected')
       elif flag is MethodAccessFlags.ACC_STATIC:
-        line.append('static')
+        method_decl.append('static')
       elif flag is MethodAccessFlags.ACC_FINAL:
-        line.append('final')
+        method_decl.append('final')
       elif flag is MethodAccessFlags.ACC_SYNCHRONIZED:
-        line.append('synchronized')
+        method_decl.append('synchronized')
       elif flag is MethodAccessFlags.ACC_NATIVE:
-        line.append('native')
+        method_decl.append('native')
       elif flag is MethodAccessFlags.ACC_ABSTRACT:
-        line.append('abstract')
+        method_decl.append('abstract')
       elif flag is MethodAccessFlags.ACC_SYNTHETIC:
         # TODO: Is just skipping the right thing to do?
-        continue
-    ret_type, *arg_types = method.descriptor
+        #continue
+        method_decl.append('/* synthetic */')
     if method.name.string == '<init>':
-      line.append(classfile.this_class)
+      method_decl.append(classfile.this_class.class_name)
     else:
-      line.append(ret_type)
-      line.append(method.name)
+      method_decl.append(simplify_class(method.descriptor.return_type))
+      method_decl.append(method.name)
 
-    args = [', ']
-    for i, arg_type in enumerate(arg_types):
-      arg = [' ', arg_type, 'arg{}'.format(i)]
-      args.append(arg)
+    argdef = method_decl.join(sep='')
+    argdef.append('(')
+    arglist = argdef.join(sep=', ')
+    argdef.append(')')
 
-    rest = ['', '(', args, ')']
-    if MethodAccessFlags.ACC_ABSTRACT in method.access_flags:
-      rest.append(';')
-    else:
-      rest.append(' {')
-    line.append(rest)
-    method_lines.append(line)
+    for i, arg_type in enumerate(method.descriptor.arg_types):
+      arglist.join(simplify_class(arg_type), 'arg{}'.format(i))
 
-    # Code...
-    body_lines = ['\n    ']
-    body_lines.append('    // Code...')
+    if method_body is not None:
+      method_body.extend(method.attributes.Code.byte_code.formatted())
 
-    method_lines.append(body_lines)
+  # Imports should all have been collected...
+  for class_ in sorted(imports):
+    import_block.line('import', class_)
 
-    method_lines.append('}')
-    lines.append(method_lines)
-
-  lines.append('}')
-
-  return format(lines)
-
-
-
-def format (item):
-  if type(item) is list:
-    return item[0].join(format(e) for e in item[1:])
-  return str(item)
-
+  return str(class_def)
